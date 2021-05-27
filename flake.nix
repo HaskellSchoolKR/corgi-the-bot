@@ -97,7 +97,7 @@
             '';
           };
 
-        mkExe = hpkgs:
+        mkPackage = hpkgs:
           with pkgs.haskell.lib;
           justStaticExecutables hpkgs.corgi-the-bot;
       in with pkgs; rec {
