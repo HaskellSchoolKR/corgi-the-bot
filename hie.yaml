@@ -1,4 +1,11 @@
 cradle:
-  stack:
+  multi:
     - path: "./"
-      component: "corgi-the-bot:exe:corgi-the-bot"
+      config:
+        cradle:
+          stack:
+            component: "corgi-the-bot:exe:corgi-the-bot"
+    - path: "./Setup.hs"
+      config:
+        cradle:
+          none: {}

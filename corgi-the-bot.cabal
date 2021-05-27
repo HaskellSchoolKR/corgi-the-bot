@@ -12,30 +12,77 @@ category:      Development
 build-type:    Simple
 
 executable corgi-the-bot
-  main-is:          Main.hs
+  main-is:            Main.hs
   other-modules:
-    DupQueue
-    Pastebin
-    StateM
+    Api.Pastebin
+    Control.EvalM
+    Data.Config
+    Data.UniqueQueue
 
   build-depends:
-      aeson
-    , attoparsec
+    , aeson
     , base             ^>=4.14
-    , binary
     , bytestring
     , containers
-    , deepseq
+    , data-default
     , discord-haskell  ^>=1.8
     , exceptions
     , lens
-    , lens-aeson
     , mtl
     , network
     , process
-    , stm
     , text
     , time
-    , transformers
 
-  default-language: Haskell2010
+  -- Simulate GHC2021 and more
+  default-language:   Haskell2010
+  default-extensions:
+    BangPatterns
+    BinaryLiterals
+    ConstrainedClassMethods
+    ConstraintKinds
+    DeriveDataTypeable
+    DeriveFoldable
+    DeriveFunctor
+    DeriveGeneric
+    DeriveLift
+    DeriveTraversable
+    DerivingStrategies
+    EmptyCase
+    EmptyDataDecls
+    EmptyDataDeriving
+    ExistentialQuantification
+    ExplicitForAll
+    FlexibleContexts
+    FlexibleInstances
+    ForeignFunctionInterface
+    GADTSyntax
+    GeneralizedNewtypeDeriving
+    HexFloatLiterals
+    ImportQualifiedPost
+    InstanceSigs
+    KindSignatures
+    LambdaCase
+    MultiParamTypeClasses
+    NamedFieldPuns
+    NamedWildCards
+    NumericUnderscores
+    PolyKinds
+    PostfixOperators
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    StandaloneDeriving
+    StandaloneKindSignatures
+    StarIsType
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+    TypeSynonymInstances
+
+  ghc-options:
+    -Wall -Wcompat -Widentities -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wmissing-deriving-strategies
+    -Wmissing-home-modules -Wmonomorphism-restriction -Wpartial-fields
+    -Wredundant-constraints -Wunused-packages -Wunused-type-patterns
