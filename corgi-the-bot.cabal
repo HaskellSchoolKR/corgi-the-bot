@@ -1,0 +1,41 @@
+cabal-version: 2.4
+name:          corgi-the-bot
+version:       0.1.0.0
+synopsis:      A frontend for Corgi The Bot on Discord
+description:   A frontend for Corgi The Bot on Dicosrd
+license:       MIT
+license-file:  LICENSE
+author:        Junyoung/Clare Jang
+maintainer:    jjc9310@gmail.com
+copyright:     2021 Junyoung Jang
+category:      Development
+build-type:    Simple
+
+executable corgi-the-bot
+  main-is:          Main.hs
+  other-modules:
+    DupQueue
+    Pastebin
+    StateM
+
+  build-depends:
+      aeson
+    , attoparsec
+    , base             ^>=4.14
+    , binary
+    , bytestring
+    , containers
+    , deepseq
+    , discord-haskell  ^>=1.8
+    , exceptions
+    , lens
+    , lens-aeson
+    , mtl
+    , network
+    , process
+    , stm
+    , text
+    , time
+    , transformers
+
+  default-language: Haskell2010

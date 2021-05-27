@@ -1,0 +1,4 @@
+cradle:
+  stack:
+    - path: "./"
+      component: "corgi-the-bot:exe:corgi-the-bot"
