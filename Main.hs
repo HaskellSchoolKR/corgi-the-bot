@@ -101,44 +101,52 @@ sendEither :: (FromJSON a, Request (r a)) => r a -> EvalM (Either RestCallErrorC
 sendEither req = use (dynamic . botHandle) >>= \bot -> liftIO $ runReaderT (restCall req) bot
 
 sendTrace :: HasCallStack => (FromJSON a, Request (r a)) => r a -> EvalM ()
-sendTrace req = do resp <- sendEither req
-                   case resp of
-                     Left err -> do logM "Error while calling REST:"
-                                    logShowM err
-                                    traceM
-                     Right _ -> pure ()
+sendTrace req = do
+  resp <- sendEither req
+  case resp of
+    Left err -> do
+      logM "Error while calling REST:"
+      logShowM err
+      traceM
+    Right _ -> pure ()
 
 send :: HasCallStack => (FromJSON a, Request (r a)) => r a -> EvalM a
-send req = do resp <- sendEither req
-              case resp of
-                Left err -> throwM err
-                Right x  -> pure x
+send req = do
+  resp <- sendEither req
+  case resp of
+    Left err -> throwM err
+    Right x  -> pure x
 
-main = do hSetBuffering stdout NoBuffering
-          h <- newEmptyMVar
-          c <- newUChan
-          let initEnv = EvalState { _botHandle = error "Not connected"
-                                  , _recentMsgs = M.empty
-                                  , _channel = c
-                                  }
-          unliftingStateM (readJsonFile configFile) (encodeFile configFile) initEnv $ \unlift -> do
-            token <- unlift $ use (persistent . key "auth" . _String)
-            forkIO $ unlift backendLoop
-            runDiscord $ RunDiscordOpts
-              { discordToken = token
-              , discordOnStart = ReaderT $ \handle -> unlift $ do
-                  assign (dynamic . botHandle) handle
-              , discordOnEnd = unlift $ do
-                  assign (dynamic . botHandle) $ error "Not connected"
-              , discordOnEvent = \event -> ReaderT $ \handle -> do
-                  unlift $ do assign (dynamic . botHandle) handle
-                              logShowM event
-                  catch (unlift $ handleEvent event)
-                        (\e -> unlift $ do logM "Exception in event loop:"
-                                           logShowM (e :: SomeException))
-              , discordOnLog = putStrLn . T.unpack
-              , discordForkThreadForEvents = False
-              }
+main :: IO Text
+main = do
+  hSetBuffering stdout NoBuffering
+  h <- newEmptyMVar
+  c <- newUChan
+  let initEnv =
+        EvalState
+        { _botHandle = error "Not connected"
+        , _recentMsgs = M.empty
+        , _channel = c
+        }
+  unliftingStateM (readJsonFile configFile) (encodeFile configFile) initEnv $ \unlift -> do
+    token <- unlift $ use (persistent . key "auth" . _String)
+    forkIO $ unlift backendLoop
+    runDiscord $ RunDiscordOpts
+      { discordToken = token
+      , discordOnStart = ReaderT $ \handle -> unlift $ do
+          assign (dynamic . botHandle) handle
+      , discordOnEnd = unlift $ do
+          assign (dynamic . botHandle) $ error "Not connected"
+      , discordOnEvent = \event -> ReaderT $ \handle -> do
+          unlift $ do assign (dynamic . botHandle) handle
+                      logShowM event
+          catch (unlift $ handleEvent event)
+                (\e -> unlift $ do
+                    logM "Exception in event loop:"
+                    logShowM (e :: SomeException))
+      , discordOnLog = putStrLn . T.unpack
+      , discordForkThreadForEvents = False
+      }
 
 parseMode :: Text -> Mode
 parseMode t = case T.toLower t of
@@ -153,44 +161,53 @@ parseMode t = case T.toLower t of
   _         -> HaskellEval
 
 parseMessage :: Int -> Text -> ParsedReq
-parseMessage maxBlocks cmd | (m, rest) <- T.break (\x -> x == '`' || isSpace x) cmd = take maxBlocks $ go (parseMode m) rest
-  where go mode t | Just next <- T.stripPrefix "!reset" t
-                  = Reset mode : go mode next
-                  | Just rest <- T.stripPrefix "```" t
-                  , "```" `T.isInfixOf` rest
-                  , (inside, next) <- T.breakOn "```" rest
-                  , (tag, code) <- dropLanguageTag inside
-                  = EvalBlock (maybe mode parseMode tag) (T.copy code) : go mode (T.drop 3 next)
-                  | Just rest <- T.stripPrefix "``" t
-                  , "``" `T.isInfixOf` rest
-                  , (inside, next) <- T.breakOn "``" rest
-                  = EvalLine mode (T.map stripControl inside) : go mode (T.drop 2 next)
-                  | Just rest <- T.stripPrefix "`" t
-                  , "`" `T.isInfixOf` rest
-                  , (inside, next) <- T.breakOn "`" rest
-                  = EvalLine mode (T.map stripControl inside) : go mode (T.drop 1 next)
-                  | Just next <- T.stripPrefix "\\" t
-                  = go mode (T.tail next)
-                  | T.null t = []
-                  | otherwise = go mode (T.tail t)
-        dropLanguageTag t | (first, rest) <- T.break (== '\n') t
-                          , not (T.any isSpace first)
-                          , not (T.null rest) = (mfilter (not . T.null) $ Just first, rest)
-                          | otherwise = (Nothing, t)
-        stripControl c | isControl c = ' '
-                       | otherwise = c
+parseMessage maxBlocks cmd
+  | (m, rest) <- T.break (\x -> x == '`' || isSpace x) cmd = take maxBlocks $ go (parseMode m) rest
+  where
+    go mode t
+      | Just next <- T.stripPrefix "!reset" t
+      = Reset mode : go mode next
+      | Just rest <- T.stripPrefix "```" t
+      , "```" `T.isInfixOf` rest
+      , (inside, next) <- T.breakOn "```" rest
+      , (tag, code) <- dropLanguageTag inside
+      = EvalBlock (maybe mode parseMode tag) (T.copy code) : go mode (T.drop 3 next)
+      | Just rest <- T.stripPrefix "``" t
+      , "``" `T.isInfixOf` rest
+      , (inside, next) <- T.breakOn "``" rest
+      = EvalLine mode (T.map stripControl inside) : go mode (T.drop 2 next)
+      | Just rest <- T.stripPrefix "`" t
+      , "`" `T.isInfixOf` rest
+      , (inside, next) <- T.breakOn "`" rest
+      = EvalLine mode (T.map stripControl inside) : go mode (T.drop 1 next)
+      | Just next <- T.stripPrefix "\\" t
+      = go mode (T.tail next)
+      | T.null t = []
+      | otherwise = go mode (T.tail t)
+
+    dropLanguageTag t
+      | (first, rest) <- T.break (== '\n') t
+      , not (T.any isSpace first)
+      , not (T.null rest) = (mfilter (not . T.null) $ Just first, rest)
+      | otherwise = (Nothing, t)
+
+    stripControl c
+      | isControl c = ' '
+      | otherwise = c
 
 pruneMessages :: EvalM ()
-pruneMessages = do time <- liftIO getCurrentTime
-                   Just !secs <- preuse (persistent . key "pruneAfterSeconds" . _Integer)
-                   modifying (dynamic . recentMsgs)
-                     (M.filter (\msg -> diffUTCTime time (msg ^. msgTime) < fromIntegral secs))
+pruneMessages = do
+  time <- liftIO getCurrentTime
+  Just !secs <- preuse (persistent . key "pruneAfterSeconds" . _Integer)
+  modifying (dynamic . recentMsgs)
+    (M.filter (\msg -> diffUTCTime time (msg ^. msgTime) < fromIntegral secs))
 
 checkTest :: Maybe GuildId -> EvalM () -> EvalM ()
-checkTest mb c = do Just !guilds <- preuses (persistent . key "testGuilds" . _Array)
-                                            (toListOf $ folded . _Integer . to fromIntegral)
-                    Just !test <- preuse (persistent . key "test" . _Bool)
-                    when (test == any (`elem` guilds) mb) c
+checkTest mb c = do
+  Just !guilds <- preuses (persistent . key "testGuilds" . _Array)
+                          (toListOf $ folded . _Integer . to fromIntegral)
+  Just !test <- preuse (persistent . key "test" . _Bool)
+  when (test == any (`elem` guilds) mb) c
 
 getMyId :: EvalM UserId
 getMyId = do
@@ -237,16 +254,19 @@ handleEvent (MessageUpdate messageChannel messageId) = do
       assign (dynamic . recentMsgs . at (messageChannel, messageId) . _Just . msgMentionsMe) mentionsMe
       when (_msgRequest /= req) $ do
         if null req
-        then case _msgMyResponse of
-          Just id -> do sendTrace $ DeleteMessage (messageChannel, id)
-                        assign (dynamic . recentMsgs . at (messageChannel, messageId) . _Just . msgMyResponse) Nothing
-          _ -> pure ()
-        else do assign (dynamic . recentMsgs . at (messageChannel, messageId) . _Just . msgRequest) req
-                queue <- use (dynamic . channel)
-                status <- liftIO $ writeUChan queue (messageChannel, messageId)
-                when (status == Just False) $ do
-                  Just !wait <- preuse (persistent . key "reactWait" . _String)
-                  sendTrace $ CreateReaction (messageChannel, messageId) wait
+          then
+            case _msgMyResponse of
+              Just id -> do
+                sendTrace $ DeleteMessage (messageChannel, id)
+                assign (dynamic . recentMsgs . at (messageChannel, messageId) . _Just . msgMyResponse) Nothing
+              _ -> pure ()
+          else do
+            assign (dynamic . recentMsgs . at (messageChannel, messageId) . _Just . msgRequest) req
+            queue <- use (dynamic . channel)
+            status <- liftIO $ writeUChan queue (messageChannel, messageId)
+            when (status == Just False) $ do
+              Just !wait <- preuse (persistent . key "reactWait" . _String)
+              sendTrace $ CreateReaction (messageChannel, messageId) wait
     _ -> pure ()
 handleEvent (MessageDelete messageChannel messageId) = do
   logM $ "<#" ++ show messageChannel ++ "> (" ++ show messageId ++ " deleted)"
@@ -274,8 +294,8 @@ handleEvent (MessageReactionAdd ReactionInfo{..}) = do
           sendTrace $ DeleteMessage (chanId, id)
         assign (dynamic . recentMsgs . at (chanId, reqId)) Nothing
     where
-      filterResponse chanId msgId userId ((chanId', _), msg)
-        = chanId == chanId' && msg ^. msgMyResponse == Just msgId && msg ^. msgRequestor == userId
+      filterResponse chanId msgId userId ((chanId', _), msg) =
+        chanId == chanId' && msg ^. msgMyResponse == Just msgId && msg ^. msgRequestor == userId
 handleEvent _ = pure ()
 
 backendLoop :: EvalM ()
@@ -290,8 +310,9 @@ backendLoop = forever $ catch (do
       outs <- forM _msgRequest $ \cmd -> do
         sendTrace $ TriggerTypingIndicator chan
         case cmd of
-          Reset mode -> do resetMode mode
-                           pure ""
+          Reset mode -> do
+            resetMode mode
+            pure ""
           EvalLine mode ln -> evalLine mode (encodeUtf8 ln)
           EvalBlock mode blk -> evalBlock mode (encodeUtf8 blk)
       text <- formatResults _msgMentionsMe (decodeUtf8With (replace '?') <$> outs)
@@ -299,12 +320,14 @@ backendLoop = forever $ catch (do
       case _msgMyResponse of
         Just id -> do
           sendTrace $ EditMessage (chan, id) text Nothing
-          if _msgMentionsMe then sendTrace $ DeleteOwnReaction (chan, id) cancel
-                            else sendTrace $ CreateReaction (chan, id) cancel
-        _ -> do Message{..} <- send $ CreateMessage chan text
-                assign (dynamic . recentMsgs . at (chan, msg) . _Just . msgMyResponse) $ Just messageId
-                unless _msgMentionsMe $ do
-                  sendTrace $ CreateReaction (chan, messageId) cancel
+          if _msgMentionsMe
+            then sendTrace $ DeleteOwnReaction (chan, id) cancel
+            else sendTrace $ CreateReaction (chan, id) cancel
+        _ -> do
+          Message{..} <- send $ CreateMessage chan text
+          assign (dynamic . recentMsgs . at (chan, msg) . _Just . msgMyResponse) $ Just messageId
+          unless _msgMentionsMe $ do
+            sendTrace $ CreateReaction (chan, messageId) cancel
     Nothing -> pure ())
   (\e -> do
       logM "Exception in backendLoop:"
@@ -317,34 +340,43 @@ formatResults mentionsMe res = do
   addWarning cancel <$> do
     msg <- doFormat maxChars
     if T.null msg
-    then do Just !check <- preuse (persistent . key "reactCheck" . _String)
-            pure check
-    else pure msg
-  where doFormat maxChars = T.concat <$> mapM format nonempty
-          where
-            nonempty = zip [0..] $ filter (not . T.null . fst) $ map (sanitize &&& id) res
+      then do
+        Just !check <- preuse (persistent . key "reactCheck" . _String)
+        pure check
+      else pure msg
+  where
+    doFormat maxChars = T.concat <$> mapM format nonempty
+      where
+        nonempty = zip [0..] $ filter (not . T.null . fst) $ map (sanitize &&& id) res
 
-            sanitize s = let r = T.replace "``" "``\x200D" $ T.filter (\x -> x == '\n' || not (isControl x)) s
-                         in if T.isSuffixOf "`" r then T.append r "\x200D" else r
+        sanitize s =
+          let
+            r = T.replace "``" "``\x200D" $ T.filter (\x -> x == '\n' || not (isControl x)) s
+          in
+            if T.isSuffixOf "`" r
+            then T.append r "\x200D"
+            else r
 
-            sorted = sortOn (T.length . fst . snd) nonempty
+        sorted = sortOn (T.length . fst . snd) nonempty
 
-            accumulate :: Int -> Set Int -> [(Int, (Text, Text))] -> Set Int
-            accumulate n s [] = s
-            accumulate n s ((i, (x, _)):xs)
-              | n + 8 + T.length x < maxChars - (3 + pasteUrlLength) * length xs
-              = accumulate (n + 8 + T.length x) (S.insert i s) xs
-              | otherwise = s
+        accumulate :: Int -> Set Int -> [(Int, (Text, Text))] -> Set Int
+        accumulate n s [] = s
+        accumulate n s ((i, (x, _)):xs)
+          | n + 8 + T.length x < maxChars - (3 + pasteUrlLength) * length xs
+          = accumulate (n + 8 + T.length x) (S.insert i s) xs
+          | otherwise = s
 
-            small = accumulate 0 S.empty sorted
+        small = accumulate 0 S.empty sorted
 
-            format (i, (san, orig))
-              | i `S.member` small = pure $ T.concat ["```\n", san, "```"]
-              | otherwise = do link <- liftIO $ paste $ encodeUtf8 orig -- TODO: don't double encode
-                               pure $ T.concat ["<", decodeUtf8With lenientDecode link, ">\n"]
+        format (i, (san, orig))
+          | i `S.member` small = pure $ T.concat ["```\n", san, "```"]
+          | otherwise = do
+              link <- liftIO $ paste $ encodeUtf8 orig -- TODO: don't double encode
+              pure $ T.concat ["<", decodeUtf8With lenientDecode link, ">\n"]
 
-        addWarning cancel xs | mentionsMe = xs
-                             | otherwise = xs <> " (``> `...` `` syntax is deprecated, please @ me instead, " <> cancel <> " to cancel)"
+    addWarning cancel xs
+      | mentionsMe = xs
+      | otherwise = xs <> " (``> `...` `` syntax is deprecated, please @ me instead, " <> cancel <> " to cancel)"
 
 resetMode :: Mode -> EvalM ()
 resetMode HaskellEval = launchWithData ["kill", "Dghci"] "" >> pure ()
@@ -377,12 +409,13 @@ launchWithData args s = do
                                                                 , close_fds = True
                                                                 }
   Just !maxChars <- preuse (persistent . key "maxOutput" . _Integral)
-  liftIO $ finally (B.hGet outr maxChars)
-                   (do hClose outr
-                       waitForProcess p)
+  liftIO $ finally (B.hGet outr maxChars) $ do
+    hClose outr
+    waitForProcess p
 
 readJsonFile :: FilePath -> IO Value
-readJsonFile file = do result <- eitherDecodeFileStrict' file
-                       case result of
-                         Left err   -> error (show err)
-                         Right json -> pure json
+readJsonFile file = do
+  result <- eitherDecodeFileStrict' file
+  case result of
+    Left err   -> error (show err)
+    Right json -> pure json

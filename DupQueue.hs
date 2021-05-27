@@ -11,11 +11,12 @@ data CChan a = CChan (MVar (MVar (ChItem a))) (MVar (MVar (ChItem a))) (MVar Int
 data ChItem a = ChItem a (MVar (ChItem a))
 
 newCChan :: IO (CChan a)
-newCChan = do hole <- newEmptyMVar
-              read <- newMVar hole
-              write <- newMVar hole
-              cnt <- newMVar 0
-              pure (CChan read write cnt)
+newCChan = do
+  hole <- newEmptyMVar
+  read <- newMVar hole
+  write <- newMVar hole
+  cnt <- newMVar 0
+  pure (CChan read write cnt)
 
 readCChan :: CChan a -> IO a
 readCChan (CChan read _ cnt) = modifyMVarMasked read $ \oldHole -> do
@@ -28,10 +29,13 @@ writeCChan :: CChan a -> a -> IO Bool
 writeCChan (CChan read write cnt) x = do
   newHole <- newEmptyMVar
   modifyMVarMasked write $ \oldHole -> do
-    waiting <- modifyMVar cnt $ \c -> if c == 0
-      then do waiting <- isEmptyMVar read
-              evaluate (succ c, waiting)
-      else evaluate (succ c, False)
+    waiting <- modifyMVar cnt $ \c ->
+      if c == 0
+      then do
+        waiting <- isEmptyMVar read
+        evaluate (succ c, waiting)
+      else
+        evaluate (succ c, False)
     putMVar oldHole (ChItem x newHole)
     pure (newHole, waiting)
 
@@ -39,9 +43,10 @@ writeCChan (CChan read write cnt) x = do
 data UChan a = UChan (CChan a) (MVar (Seq a))
 
 newUChan :: IO (UChan a)
-newUChan = do chan <- newCChan
-              seq <- newMVar S.empty
-              pure (UChan chan seq)
+newUChan = do
+  chan <- newCChan
+  seq <- newMVar S.empty
+  pure (UChan chan seq)
 
 readUChan :: UChan a -> IO a
 readUChan (UChan chan seq) = mask_ $ do
@@ -55,8 +60,10 @@ writeUChan :: Eq a => UChan a -> a -> IO (Maybe Bool)
 writeUChan (UChan chan seq) x = mask_ $ do
   s <- takeMVar seq
   if x `elem` s
-  then do putMVar seq s
-          pure Nothing
-  else do w <- writeCChan chan x
-          putMVar seq $! s S.|> x
-          pure (Just w)
+    then do
+      putMVar seq s
+      pure Nothing
+    else do
+      w <- writeCChan chan x
+      putMVar seq $! s S.|> x
+      pure (Just w)
