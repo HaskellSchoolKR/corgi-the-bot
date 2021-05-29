@@ -290,7 +290,7 @@ formatResults res = do
   !maxChars <- view Config.maxCharsPerMsg
   msg <- doFormat maxChars
   if T.null msg
-    then view Config.reactCheck
+    then view Config.reactCancel
     else pure msg
   where
     doFormat maxChars = T.concat <$> mapM format nonempty
