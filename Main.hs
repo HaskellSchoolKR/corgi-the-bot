@@ -327,15 +327,14 @@ resetMode HaskellEval = void $ launchWithData ["kill", "corgi-ghci"] ""
 resetMode _           = pure ()
 
 evalLine :: Mode -> ByteString -> EvalM ByteString
-evalLine HaskellEval line = launchWithLine ["corgi-ghci"] line
-evalLine mode line        = evalBlock mode line
+evalLine HaskellEval = launchWithLine ["corgi-ghci"]
+evalLine mode        = evalBlock mode
 
 evalBlock :: Mode -> ByteString -> EvalM ByteString
-evalBlock _ _ = pure "Error: code block is not supported yet"
 -- evalBlock HaskellEval block = do
 --   !maxChars <- view Config.maxOutput
 --   fmap (B.take maxChars . B.concat) $ mapM (evalLine HaskellEval) $ [":{"] ++ B.split (fromIntegral $ fromEnum '\n') block ++ [":}"]
--- evalBlock Haskell block = launchWithData ["corgi-runghc"] block
+evalBlock _ = launchWithData ["corgi-runghc"]
 
 launchWithLine :: [String] -> ByteString -> EvalM ByteString
 launchWithLine args s =
