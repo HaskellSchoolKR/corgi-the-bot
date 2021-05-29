@@ -331,7 +331,7 @@ evalLine HaskellEval line = launchWithLine ["corgi-ghci"] line
 evalLine mode line        = evalBlock mode line
 
 evalBlock :: Mode -> ByteString -> EvalM ByteString
-evalBlock _ _ = pure "알림: 아직 Code block를 지원하지 않습니다."
+evalBlock _ _ = pure "Error: code block is not supported yet"
 -- evalBlock HaskellEval block = do
 --   !maxChars <- view Config.maxOutput
 --   fmap (B.take maxChars . B.concat) $ mapM (evalLine HaskellEval) $ [":{"] ++ B.split (fromIntegral $ fromEnum '\n') block ++ [":}"]
