@@ -331,10 +331,11 @@ evalLine HaskellEval line = launchWithLine ["corgi-ghci"] line
 evalLine mode line        = evalBlock mode line
 
 evalBlock :: Mode -> ByteString -> EvalM ByteString
-evalBlock HaskellEval block = do
-  !maxChars <- view Config.maxOutput
-  fmap (B.take maxChars . B.concat) $ mapM (evalLine HaskellEval) $ [":{"] ++ B.split (fromIntegral $ fromEnum '\n') block ++ [":}"]
-evalBlock Haskell block = launchWithData ["corgi-runghc"] block
+evalBlock _ _ = pure "Error: block is not supported yet"
+-- evalBlock HaskellEval block = do
+--   !maxChars <- view Config.maxOutput
+--   fmap (B.take maxChars . B.concat) $ mapM (evalLine HaskellEval) $ [":{"] ++ B.split (fromIntegral $ fromEnum '\n') block ++ [":}"]
+-- evalBlock Haskell block = launchWithData ["corgi-runghc"] block
 
 launchWithLine :: [String] -> ByteString -> EvalM ByteString
 launchWithLine args s =
