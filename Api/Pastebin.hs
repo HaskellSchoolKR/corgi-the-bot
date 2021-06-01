@@ -6,18 +6,9 @@ import qualified Data.ByteString           as BS
 import           Network.Socket
 import           Network.Socket.ByteString as NBS
 
-pastebinAddr :: HostName
-pastebinAddr = "tcp.st"
-
-pastebinPort :: Integer
-pastebinPort = 7777
-
-pasteUrlLength :: Int
-pasteUrlLength = 25
-
 paste :: ByteString -> IO ByteString
 paste text =
-  getAddrInfo Nothing (Just pastebinAddr) (Just $ show pastebinPort) >>= \case
+  getAddrInfo Nothing (Just "tcp.st") (Just "7777") >>= \case
     [] -> error "Could not resolve hostname"
     addr:_ -> do
       sock <- socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr)

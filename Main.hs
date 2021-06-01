@@ -4,7 +4,7 @@
 
 module Main where
 
-import           Api.Pastebin             (paste, pasteUrlLength)
+import           Api.Pastebin             (paste)
 import           Control.Concurrent       (forkIO)
 import           Control.EvalM
 import           Control.Lens
@@ -21,7 +21,6 @@ import qualified Data.Config              as Config
 import           Data.Default             (def)
 import           Data.List                (sortOn)
 import qualified Data.Map                 as M
-import           Data.Set                 (Set)
 import qualified Data.Set                 as S
 import           Data.Text                (Text)
 import qualified Data.Text                as T
@@ -290,7 +289,7 @@ formatResults res = do
   !maxChars <- view Config.maxCharsPerMsg
   msg <- doFormat maxChars
   if T.null msg
-    then view Config.reactCancel
+    then view Config.reactCheck
     else pure msg
   where
     doFormat maxChars = T.concat <$> mapM format nonempty
@@ -307,12 +306,14 @@ formatResults res = do
 
         sorted = sortOn (T.length . fst . snd) nonempty
 
-        accumulate :: Int -> Set Int -> [(Int, (Text, Text))] -> Set Int
         accumulate _ s [] = s
         accumulate n s ((i, (x, _)):xs)
-          | n + 8 + T.length x < maxChars - (3 + pasteUrlLength) * length xs
-          = accumulate (n + 8 + T.length x) (S.insert i s) xs
+          | n + messageLength < maxCharsLeft
+          = accumulate (n + messageLength) (S.insert i s) xs
           | otherwise = s
+          where
+            messageLength = 8 + T.length x
+            maxCharsLeft = maxChars - 28 * length xs
 
         small = accumulate 0 S.empty sorted
 
