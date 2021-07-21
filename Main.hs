@@ -34,8 +34,10 @@ import           Discord.Internal.Rest
 import           Discord.Requests
 import           GHC.IO.Encoding          (setLocaleEncoding, utf8)
 import           GHC.Stack                (HasCallStack, callStack)
-import           System.IO                (BufferMode (NoBuffering), hClose,
-                                           hSetBuffering, stdout)
+import           System.IO                (BufferMode (NoBuffering),
+                                           IOMode (ReadMode), hClose,
+                                           hSetBuffering, openBinaryFile,
+                                           stdout)
 import           System.Process
 
 configFile :: FilePath
@@ -345,21 +347,21 @@ launchWithData :: [String] -> ByteString -> EvalM ByteString
 launchWithData args s = do
   !cmd <- view Config.sandboxCmd
   !conf <- view Config.sandboxConf
-  (p, inH, outH) <- liftIO (createCmdProcess cmd conf)
+  liftIO $ B.writeFile "input" s
+  inH <- liftIO $ openBinaryFile "input" ReadMode
+  (p, outH) <- liftIO (createCmdProcess cmd conf inH)
   !maxChars <- view Config.maxOutput
-  liftIO $ B.hPut inH s
   liftIO $ finally (B.hGet outH maxChars) $ do
     hClose outH
     waitForProcess p
   where
-    createCmdProcess cmd conf = do
-      (inRh, inWh) <- createPipe
+    createCmdProcess cmd conf inH = do
       (outRh, outWh) <- createPipe
       let
-        std_in = UseHandle inRh
+        std_in = UseHandle inH
         std_out = UseHandle outWh
         std_err = UseHandle outWh
         close_fds = True
       (_, _, _, p) <- createProcess
         (proc cmd (conf:args)) { std_in, std_out, std_err, close_fds }
-      pure (p, inWh, outRh)
+      pure (p, outRh)
