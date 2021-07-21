@@ -332,10 +332,10 @@ evalLine HaskellEval = launchWithLine ["corgi-ghci"]
 evalLine mode        = evalBlock mode
 
 evalBlock :: Mode -> ByteString -> EvalM ByteString
--- evalBlock HaskellEval block = do
---   !maxChars <- view Config.maxOutput
---   fmap (B.take maxChars . B.concat) $ mapM (evalLine HaskellEval) $ [":{"] ++ B.split (fromIntegral $ fromEnum '\n') block ++ [":}"]
-evalBlock _ = launchWithData ["corgi-runghc"]
+evalBlock HaskellEval block = do
+  !maxChars <- view Config.maxOutput
+  fmap (B.take maxChars . B.concat) $ mapM (evalLine HaskellEval) $ [":{"] ++ B.split (fromIntegral $ fromEnum '\n') block ++ [":}"]
+evalBlock _           block = launchWithData ["corgi-runghc"] block
 
 launchWithLine :: [String] -> ByteString -> EvalM ByteString
 launchWithLine args s =
