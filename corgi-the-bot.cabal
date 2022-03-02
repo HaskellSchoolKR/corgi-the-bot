@@ -25,7 +25,7 @@ executable corgi-the-bot
     , bytestring
     , containers
     , data-default
-    , discord-haskell  ^>=1.8
+    , discord-haskell  ^>=1.12.1
     , exceptions
     , lens
     , mtl

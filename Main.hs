@@ -21,6 +21,7 @@ import qualified Data.Config              as Config
 import           Data.Default             (def)
 import           Data.List                (sortOn)
 import qualified Data.Map                 as M
+import           Data.Maybe               (fromMaybe)
 import qualified Data.Set                 as S
 import           Data.Text                (Text)
 import qualified Data.Text                as T
@@ -104,6 +105,25 @@ main = do
               logShowM (e :: SomeException))
       discordOnLog = T.putStrLn
       discordForkThreadForEvents = False
+      discordGatewayIntent =
+        GatewayIntent
+        { gatewayIntentGuilds = False
+        , gatewayIntentMembers = False
+        , gatewayIntentBans = False
+        , gatewayIntentEmojis = False
+        , gatewayIntentIntegrations = False
+        , gatewayIntentWebhooks = False
+        , gatewayIntentInvites = False
+        , gatewayIntentVoiceStates = False
+        , gatewayIntentPrecenses = False
+        , gatewayIntentMessageChanges = True
+        , gatewayIntentMessageReactions = True
+        , gatewayIntentMessageTyping = True
+        , gatewayIntentDirectMessageChanges = True
+        , gatewayIntentDirectMessageReactions = True
+        , gatewayIntentDirectMessageTyping = True
+        , gatewayIntentMessageContent = True
+        }
       discordOpts = RunDiscordOpts {..}
     void . runDiscord $ discordOpts
 
@@ -170,71 +190,71 @@ checkTest mb c = do
 getMyId :: EvalM UserId
 getMyId = do
   cache <- liftDiscordHandler readCache
-  pure $ userId $ _currentUser cache
+  pure $ userId $ cacheCurrentUser cache
 
 handleEvent :: HasCallStack => Event -> EvalM ()
 handleEvent (MessageCreate Message {..}) = do
-  logM $ "[" ++ maybe "" show messageGuild ++ "] <#" ++ show messageChannel ++ "> <@" ++ show (userId messageAuthor) ++ "> <" ++ T.unpack (userName messageAuthor) ++ "#" ++ T.unpack (userDiscrim messageAuthor) ++ "> " ++ T.unpack messageText ++ " (" ++ show messageId ++ ")"
+  logM $ "[" ++ maybe "" show messageGuildId ++ "] <#" ++ show messageChannelId ++ "> <@" ++ show (userId messageAuthor) ++ "> <" ++ T.unpack (userName messageAuthor) ++ "#" ++ T.unpack (fromMaybe "<no tag>" (userDiscrim messageAuthor)) ++ "> " ++ T.unpack messageContent ++ " (" ++ show messageId ++ ")"
   myId <- getMyId
   let _msgMentionsMe = myId `elem` (userId <$> messageMentions)
   when _msgMentionsMe $ do
-    checkTest messageGuild $ do
+    checkTest messageGuildId $ do
       pruneMessages
       _msgTime <- liftIO getCurrentTime
       !maxBlocks <- view Config.maxBlocksPerMsg
       let
-        _msgRequest = parseMessage maxBlocks messageText
+        _msgRequest = parseMessage maxBlocks messageContent
         _msgMyResponse = Nothing
         _msgRequestor = userId messageAuthor
-      assign (recentMsgs . at (messageChannel, messageId)) $ Just $ RecentMsg {..}
+      assign (recentMsgs . at (messageChannelId, messageId)) $ Just $ RecentMsg {..}
       unless (null _msgRequest) $ do
         queue <- use channel
-        status <- liftIO $ writeUChan queue (messageChannel, messageId)
+        status <- liftIO $ writeUChan queue (messageChannelId, messageId)
         when (status == Just False) $ do
           !wait <- view Config.reactWait
-          sendTrace $ CreateReaction (messageChannel, messageId) wait
-handleEvent (MessageUpdate mChan mId) = do
+          sendTrace $ CreateReaction (messageChannelId, messageId) wait
+handleEvent (MessageUpdate mChanId mId) = do
   pruneMessages
-  x <- use (recentMsgs . at (mChan, mId))
+  x <- use (recentMsgs . at (mChanId, mId))
   !maxBlocks <- view Config.maxBlocksPerMsg
   case x of
     Just RecentMsg {..} -> do
-      Message {..} <- send $ GetChannelMessage (mChan, mId)
-      logM $ "[" ++ maybe "" show messageGuild ++ "] <#" ++ show messageChannel ++ "> <@" ++ show (userId messageAuthor) ++ "> <" ++ T.unpack (userName messageAuthor) ++ "#" ++ T.unpack (userDiscrim messageAuthor) ++ "> " ++ T.unpack messageText ++ " (" ++ show messageId ++ " edited)"
+      Message {..} <- send $ GetChannelMessage (mChanId, mId)
+      logM $ "[" ++ maybe "" show messageGuildId ++ "] <#" ++ show messageChannelId ++ "> <@" ++ show (userId messageAuthor) ++ "> <" ++ T.unpack (userName messageAuthor) ++ "#" ++ T.unpack (fromMaybe "<no tag>" (userDiscrim messageAuthor)) ++ "> " ++ T.unpack messageContent ++ " (" ++ show messageId ++ " edited)"
       myId <- getMyId
       let mentionsMe = myId `elem` (userId <$> messageMentions)
-      let req = parseMessage maxBlocks messageText
-      assign (recentMsgs . at (messageChannel, messageId) . _Just . msgMentionsMe) mentionsMe
+      let req = parseMessage maxBlocks messageContent
+      assign (recentMsgs . at (messageChannelId, messageId) . _Just . msgMentionsMe) mentionsMe
       when (_msgRequest /= req) $ do
         if null req
           then
             case _msgMyResponse of
               Just respMId -> do
-                sendTrace $ DeleteMessage (messageChannel, respMId)
-                assign (recentMsgs . at (messageChannel, messageId) . _Just . msgMyResponse) Nothing
+                sendTrace $ DeleteMessage (messageChannelId, respMId)
+                assign (recentMsgs . at (messageChannelId, messageId) . _Just . msgMyResponse) Nothing
               _ -> pure ()
           else do
-            assign (recentMsgs . at (messageChannel, messageId) . _Just . msgRequest) req
+            assign (recentMsgs . at (messageChannelId, messageId) . _Just . msgRequest) req
             queue <- use channel
-            status <- liftIO $ writeUChan queue (messageChannel, messageId)
+            status <- liftIO $ writeUChan queue (messageChannelId, messageId)
             when (status == Just False) $ do
               !wait <- view Config.reactWait
-              sendTrace $ CreateReaction (messageChannel, messageId) wait
+              sendTrace $ CreateReaction (messageChannelId, messageId) wait
     _ -> pure ()
-handleEvent (MessageDelete messageChannel messageId) = do
-  logM $ "<#" ++ show messageChannel ++ "> (" ++ show messageId ++ " deleted)"
+handleEvent (MessageDelete messageChannelId messageId) = do
+  logM $ "<#" ++ show messageChannelId ++ "> (" ++ show messageId ++ " deleted)"
   pruneMessages
-  x <- use (recentMsgs . at (messageChannel, messageId))
+  x <- use (recentMsgs . at (messageChannelId, messageId))
   case x of
-    Just RecentMsg{_msgMyResponse = Just msgId} -> sendTrace $ DeleteMessage (messageChannel, msgId)
+    Just RecentMsg{_msgMyResponse = Just msgId} -> sendTrace $ DeleteMessage (messageChannelId, msgId)
     _ -> pure ()
-handleEvent (MessageDeleteBulk messageChannel messageIds) = do
-  logM $ "<#" ++ show messageChannel ++ "> (" ++ show messageIds ++ " deleted)"
+handleEvent (MessageDeleteBulk messageChannelId messageIds) = do
+  logM $ "<#" ++ show messageChannelId ++ "> (" ++ show messageIds ++ " deleted)"
   pruneMessages
   forM_ messageIds $ \messageId -> do
-    x <- use (recentMsgs . at (messageChannel, messageId))
+    x <- use (recentMsgs . at (messageChannelId, messageId))
     case x of
-      Just RecentMsg{_msgMyResponse = Just msgId} -> sendTrace $ DeleteMessage (messageChannel, msgId)
+      Just RecentMsg{_msgMyResponse = Just msgId} -> sendTrace $ DeleteMessage (messageChannelId, msgId)
       _ -> pure ()
 handleEvent (MessageReactionAdd ReactionInfo {..}) = do
   checkTest reactionGuildId $ do
